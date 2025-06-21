@@ -100,6 +100,10 @@ const ContentTrackerSystem = () => {
     eventType: 'paid' // New field to distinguish paid vs PR
   });
 
+  // Inline editing state
+  const [editingCell, setEditingCell] = useState({ eventId: null, field: null });
+  const [editValue, setEditValue] = useState('');
+
   const users = [
     { id: 'gregg', name: 'Gregg', password: 'gregg123' },
     { id: 'cook', name: 'Cook', password: 'cook123' }
@@ -339,6 +343,119 @@ Created by: ${currentUser.name}
     }
   };
 
+  // Inline editing functions
+  const startEditing = (eventId, field, currentValue) => {
+    setEditingCell({ eventId, field });
+    setEditValue(currentValue || '');
+  };
+
+  const cancelEditing = () => {
+    setEditingCell({ eventId: null, field: null });
+    setEditValue('');
+  };
+
+  const saveEdit = async (eventId, field) => {
+    const updatedEvents = events.map(event => {
+      if (event.id === eventId) {
+        const updatedEvent = { ...event, [field]: editValue };
+        
+        // If changing event type, update related fields
+        if (field === 'eventType') {
+          updatedEvent.paymentStatus = editValue === 'paid' ? 'Paid' : 'PR';
+          if (editValue === 'pr') {
+            updatedEvent.totalOwed = 0;
+            updatedEvent.totalPaid = 0;
+            updatedEvent.paymentMethods = 'PR';
+          }
+        }
+
+        // Update calendar event if it exists
+        if (event.calendarEventId) {
+          updateCalendarEvent(updatedEvent, event.calendarEventId);
+        }
+        
+        return updatedEvent;
+      }
+      return event;
+    });
+    
+    setEvents(updatedEvents);
+    cancelEditing();
+  };
+
+  const handleKeyPress = (e, eventId, field) => {
+    if (e.key === 'Enter') {
+      saveEdit(eventId, field);
+    } else if (e.key === 'Escape') {
+      cancelEditing();
+    }
+  };
+
+  // Render editable cell
+  const renderEditableCell = (event, field, displayValue, type = 'text') => {
+    const isEditing = editingCell.eventId === event.id && editingCell.field === field;
+    
+    if (isEditing) {
+      if (field === 'eventType') {
+        return (
+          <select
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={() => saveEdit(event.id, field)}
+            onKeyDown={(e) => handleKeyPress(e, event.id, field)}
+            className="w-full px-2 py-1 border border-indigo-500 rounded text-xs"
+            autoFocus
+          >
+            <option value="paid">💰 Paid</option>
+            <option value="pr">📢 PR</option>
+          </select>
+        );
+      } else if (field === 'contact' || field === 'editStatus') {
+        const options = field === 'contact' 
+          ? ['Edit', 'POSTED', 'Booked', 'Unscheduled']
+          : ['Paid', 'PR', 'Deposited'];
+        
+        return (
+          <select
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={() => saveEdit(event.id, field)}
+            onKeyDown={(e) => handleKeyPress(e, event.id, field)}
+            className="w-full px-2 py-1 border border-indigo-500 rounded text-xs"
+            autoFocus
+          >
+            <option value="">Select...</option>
+            {options.map(option => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        );
+      } else {
+        return (
+          <input
+            type={type}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={() => saveEdit(event.id, field)}
+            onKeyDown={(e) => handleKeyPress(e, event.id, field)}
+            className="w-full px-2 py-1 border border-indigo-500 rounded text-xs"
+            autoFocus
+          />
+        );
+      }
+    }
+    
+    return (
+      <span 
+        onClick={() => startEditing(event.id, field, event[field])}
+        className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded block w-full"
+        title="Click to edit"
+      >
+        {displayValue}
+      </span>
+    );
+  };
+
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case 'paid': return 'bg-green-100 text-green-800';
@@ -511,7 +628,10 @@ Created by: ${currentUser.name}
 
         {/* Action Buttons */}
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-semibold text-gray-900">Events & Projects</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Events & Projects</h2>
+            <p className="text-sm text-gray-500">Click on any cell to edit directly • Press Enter to save • Press Escape to cancel</p>
+          </div>
           <button
             onClick={() => setShowEventForm(true)}
             className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
@@ -723,28 +843,54 @@ Created by: ${currentUser.name}
                 {events.map((event) => (
                   <tr key={event.id} className="hover:bg-gray-50">
                     <td className="px-4 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${(event.eventType === 'pr' || event.paymentStatus === 'PR') ? 'bg-pink-100 text-pink-800' : 'bg-green-100 text-green-800'}`}>
-                        {(event.eventType === 'pr' || event.paymentStatus === 'PR') ? '📢 PR' : '💰 Paid'}
-                      </span>
+                      {renderEditableCell(
+                        event, 
+                        'eventType', 
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${(event.eventType === 'pr' || event.paymentStatus === 'PR') ? 'bg-pink-100 text-pink-800' : 'bg-green-100 text-green-800'}`}>
+                          {(event.eventType === 'pr' || event.paymentStatus === 'PR') ? '📢 PR' : '💰 Paid'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(event.filmDate).toLocaleDateString()}
+                      {renderEditableCell(
+                        event, 
+                        'filmDate', 
+                        new Date(event.filmDate).toLocaleDateString(),
+                        'date'
+                      )}
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{event.client}</td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{event.instagramUser}</td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{event.content}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {renderEditableCell(event, 'client', event.client)}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {renderEditableCell(event, 'instagramUser', event.instagramUser)}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {renderEditableCell(event, 'content', event.content)}
+                    </td>
                     <td className="px-4 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(event.contact)}`}>
-                        {event.contact}
-                      </span>
+                      {renderEditableCell(
+                        event, 
+                        'contact', 
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(event.contact)}`}>
+                          {event.contact}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {(event.eventType === 'pr' || event.paymentStatus === 'PR') ? (
                         <span className="text-pink-600 font-medium">No Payment</span>
                       ) : (
-                        <div className="text-xs">
-                          <div>Owed: ${parseFloat(event.totalOwed || 0).toFixed(2)}</div>
-                          <div>Paid: ${parseFloat(event.totalPaid || 0).toFixed(2)}</div>
+                        <div className="space-y-1">
+                          <div className="text-xs">
+                            Owed: {renderEditableCell(event, 'totalOwed', `${parseFloat(event.totalOwed || 0).toFixed(2)}`, 'number')}
+                          </div>
+                          <div className="text-xs">
+                            Paid: {renderEditableCell(event, 'totalPaid', `${parseFloat(event.totalPaid || 0).toFixed(2)}`, 'number')}
+                          </div>
+                          <div className="text-xs">
+                            Method: {renderEditableCell(event, 'paymentMethods', event.paymentMethods)}
+                          </div>
                         </div>
                       )}
                     </td>
@@ -766,12 +912,14 @@ Created by: ${currentUser.name}
                         <button
                           onClick={() => handleEdit(event)}
                           className="text-indigo-600 hover:text-indigo-900"
+                          title="Edit in form"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(event.id)}
                           className="text-red-600 hover:text-red-900"
+                          title="Delete event"
                         >
                           <X className="w-4 h-4" />
                         </button>
