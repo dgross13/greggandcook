@@ -97,10 +97,10 @@ const ContentTrackerSystem = () => {
     totalPaid: '',
     paymentMethods: '',
     editors: '',
-    eventType: 'paid' // New field to distinguish paid vs PR
+    eventType: 'paid'
   });
 
-  // Inline editing state
+  // NEW: Inline editing state
   const [editingCell, setEditingCell] = useState({ eventId: null, field: null });
   const [editValue, setEditValue] = useState('');
 
@@ -187,7 +187,7 @@ Created by: ${currentUser.name}
           date: eventData.filmDate,
           timeZone: 'America/New_York'
         },
-        colorId: eventData.eventType === 'paid' ? '10' : '11' // Green for paid, red for PR
+        colorId: eventData.eventType === 'paid' ? '10' : '11'
       };
 
       const response = await gapi.client.calendar.events.insert({
@@ -343,7 +343,7 @@ Created by: ${currentUser.name}
     }
   };
 
-  // Inline editing functions
+  // NEW: Inline editing functions
   const startEditing = (eventId, field, currentValue) => {
     setEditingCell({ eventId, field });
     setEditValue(currentValue || '');
@@ -391,7 +391,7 @@ Created by: ${currentUser.name}
     }
   };
 
-  // Render editable cell
+  // NEW: Render editable cell function
   const renderEditableCell = (event, field, displayValue, type = 'text') => {
     const isEditing = editingCell.eventId === event.id && editingCell.field === field;
     
@@ -403,7 +403,7 @@ Created by: ${currentUser.name}
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={() => saveEdit(event.id, field)}
             onKeyDown={(e) => handleKeyPress(e, event.id, field)}
-            className="w-full px-2 py-1 border border-indigo-500 rounded text-xs"
+            className="w-full px-2 py-1 border border-indigo-500 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
             autoFocus
           >
             <option value="paid">💰 Paid</option>
@@ -421,7 +421,7 @@ Created by: ${currentUser.name}
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={() => saveEdit(event.id, field)}
             onKeyDown={(e) => handleKeyPress(e, event.id, field)}
-            className="w-full px-2 py-1 border border-indigo-500 rounded text-xs"
+            className="w-full px-2 py-1 border border-indigo-500 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
             autoFocus
           >
             <option value="">Select...</option>
@@ -438,7 +438,7 @@ Created by: ${currentUser.name}
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={() => saveEdit(event.id, field)}
             onKeyDown={(e) => handleKeyPress(e, event.id, field)}
-            className="w-full px-2 py-1 border border-indigo-500 rounded text-xs"
+            className="w-full px-2 py-1 border border-indigo-500 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
             autoFocus
           />
         );
@@ -448,7 +448,7 @@ Created by: ${currentUser.name}
     return (
       <span 
         onClick={() => startEditing(event.id, field, event[field])}
-        className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded block w-full"
+        className="cursor-pointer hover:bg-gray-100 px-2 py-1 rounded block w-full transition-colors duration-150"
         title="Click to edit"
       >
         {displayValue}
@@ -630,7 +630,9 @@ Created by: ${currentUser.name}
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Events & Projects</h2>
-            <p className="text-sm text-gray-500">Click on any cell to edit directly • Press Enter to save • Press Escape to cancel</p>
+            <p className="text-sm text-gray-500 mt-1">
+              💡 <span className="font-medium">Pro tip:</span> Click on any cell to edit directly • Press Enter to save • Press Escape to cancel
+            </p>
           </div>
           <button
             onClick={() => setShowEventForm(true)}
@@ -834,7 +836,7 @@ Created by: ${currentUser.name}
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instagram User</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Details</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Calendar</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -846,8 +848,9 @@ Created by: ${currentUser.name}
                       {renderEditableCell(
                         event, 
                         'eventType', 
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${(event.eventType === 'pr' || event.paymentStatus === 'PR') ? 'bg-pink-100 text-pink-800' : 'bg-green-100 text-green-800'}`}>
-                          {(event.eventType === 'pr' || event.paymentStatus === 'PR') ? '📢 PR' : '💰 Paid'}
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${(event.eventType === 'pr' || event.paymentStatus === 'PR') ? 'bg-pink-100 text-pink-700' : 'bg-green-100 text-green-700'}`}>
+                          <span className={`w-2 h-2 rounded-full mr-2 ${(event.eventType === 'pr' || event.paymentStatus === 'PR') ? 'bg-pink-500' : 'bg-green-500'}`}></span>
+                          {(event.eventType === 'pr' || event.paymentStatus === 'PR') ? 'PR' : 'Paid'}
                         </span>
                       )}
                     </td>
@@ -877,19 +880,31 @@ Created by: ${currentUser.name}
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
                       {(event.eventType === 'pr' || event.paymentStatus === 'PR') ? (
-                        <span className="text-pink-600 font-medium">No Payment</span>
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-pink-100 text-pink-700">
+                          <span className="w-2 h-2 bg-pink-500 rounded-full mr-2"></span>
+                          PR Event
+                        </span>
                       ) : (
-                        <div className="space-y-1">
-                          <div className="text-xs">
-                            Owed: {renderEditableCell(event, 'totalOwed', `${parseFloat(event.totalOwed || 0).toFixed(2)}`, 'number')}
+                        <div className="space-y-2 min-w-[120px]">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-500 font-medium">Owed:</span>
+                            <span className="text-yellow-700 font-semibold">
+                              {renderEditableCell(event, 'totalOwed', `$${parseFloat(event.totalOwed || 0).toFixed(2)}`, 'number')}
+                            </span>
                           </div>
-                          <div className="text-xs">
-                            Paid: {renderEditableCell(event, 'totalPaid', `${parseFloat(event.totalPaid || 0).toFixed(2)}`, 'number')}
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-500 font-medium">Paid:</span>
+                            <span className="text-green-700 font-semibold">
+                              {renderEditableCell(event, 'totalPaid', `$${parseFloat(event.totalPaid || 0).toFixed(2)}`, 'number')}
+                            </span>
                           </div>
-                          <div className="text-xs">
-                            Method: {renderEditableCell(event, 'paymentMethods', event.paymentMethods)}
+                          <div className="flex items-center text-xs pt-1 border-t border-gray-100">
+                            <DollarSign className="w-3 h-3 text-gray-400 mr-1 flex-shrink-0" />
+                            <span className="text-gray-600 truncate text-xs">
+                              {renderEditableCell(event, 'paymentMethods', event.paymentMethods || 'Not set')}
+                            </span>
                           </div>
                         </div>
                       )}
@@ -911,14 +926,14 @@ Created by: ${currentUser.name}
                       <div className="flex space-x-2">
                         <button
                           onClick={() => handleEdit(event)}
-                          className="text-indigo-600 hover:text-indigo-900"
+                          className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
                           title="Edit in form"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(event.id)}
-                          className="text-red-600 hover:text-red-900"
+                          className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
                           title="Delete event"
                         >
                           <X className="w-4 h-4" />
