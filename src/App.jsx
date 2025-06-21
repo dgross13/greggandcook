@@ -17,11 +17,10 @@ const ContentTrackerSystem = () => {
       id: 1,
       filmDate: '2025-06-25',
       client: 'willnorr',
+      contactPerson: 'Will',
       instagramUser: 'DumbLit Live',
       content: 'Dumblit Live',
-      contact: 'Edit',
-      editStatus: 'Paid',
-      paymentStatus: 'Paid',
+      status: 'Edit',
       totalOwed: 350.00,
       payments: [
         { id: 1, amount: 350.00, method: 'Cashapp' }
@@ -35,11 +34,10 @@ const ContentTrackerSystem = () => {
       id: 2,
       filmDate: '2025-06-23',
       client: 'boyband',
+      contactPerson: 'Manager',
       instagramUser: 'DumbLit Live',
       content: 'Dumblit Live',
-      contact: 'POSTED',
-      editStatus: 'PR',
-      paymentStatus: 'PR',
+      status: 'POSTED',
       totalOwed: 0,
       payments: [],
       editors: 'N/A',
@@ -51,11 +49,10 @@ const ContentTrackerSystem = () => {
       id: 3,
       filmDate: '2025-06-25',
       client: 'oneway lil steve',
+      contactPerson: 'Steve',
       instagramUser: 'DumbLit Live',
       content: 'Dumblit Live',
-      contact: 'Edit',
-      editStatus: 'Paid',
-      paymentStatus: 'Paid',
+      status: 'Edit',
       totalOwed: 200.00,
       payments: [
         { id: 1, amount: 200.00, method: 'Apple Pay' }
@@ -69,11 +66,10 @@ const ContentTrackerSystem = () => {
       id: 4,
       filmDate: '2025-06-14',
       client: 'rio feltt',
+      contactPerson: 'Rio',
       instagramUser: 'DumbLit Live',
       content: 'Dumblit Live',
-      contact: 'Edit',
-      editStatus: 'Paid',
-      paymentStatus: 'Paid',
+      status: 'Edit',
       totalOwed: 1000.00,
       payments: [
         { id: 1, amount: 300.00, method: 'Cashapp' },
@@ -92,11 +88,10 @@ const ContentTrackerSystem = () => {
   const [formData, setFormData] = useState({
     filmDate: '',
     client: '',
+    contactPerson: '',
     instagramUser: '',
     content: '',
-    contact: '',
-    editStatus: '',
-    paymentStatus: '',
+    status: '',
     totalOwed: '',
     payments: [],
     editors: '',
@@ -107,9 +102,8 @@ const ContentTrackerSystem = () => {
   const [editingCell, setEditingCell] = useState({ eventId: null, field: null });
   const [editValue, setEditValue] = useState('');
 
-  // NEW: Payment management state
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [currentEventForPayments, setCurrentEventForPayments] = useState(null);
+  // NEW: Payment dropdown state
+  const [expandedPayments, setExpandedPayments] = useState(new Set());
 
   const paymentMethods = ['Cashapp', 'Apple Pay', 'Zelle', 'Venmo', 'PayPal', 'Bank Transfer', 'Check', 'Cash', 'Stripe', 'Square'];
 
@@ -168,6 +162,16 @@ const ContentTrackerSystem = () => {
   const openPaymentModal = (event) => {
     setCurrentEventForPayments(event);
     setShowPaymentModal(true);
+  };
+
+  const togglePaymentDropdown = (eventId) => {
+    const newExpanded = new Set(expandedPayments);
+    if (newExpanded.has(eventId)) {
+      newExpanded.delete(eventId);
+    } else {
+      newExpanded.add(eventId);
+    }
+    setExpandedPayments(newExpanded);
   };
 
   const users = [
@@ -340,11 +344,10 @@ Created by: ${currentUser.name}
     setFormData({
       filmDate: '',
       client: '',
+      contactPerson: '',
       instagramUser: '',
       content: '',
-      contact: '',
-      editStatus: '',
-      paymentStatus: '',
+      status: '',
       totalOwed: '',
       payments: [],
       editors: '',
@@ -475,10 +478,24 @@ Created by: ${currentUser.name}
             <option value="pr">📢 PR</option>
           </select>
         );
-      } else if (field === 'contact' || field === 'editStatus') {
-        const options = field === 'contact' 
-          ? ['Edit', 'POSTED', 'Booked', 'Unscheduled']
-          : ['Paid', 'PR', 'Deposited'];
+      } else if (field === 'status') {
+        const options = ['Edit', 'POSTED', 'Booked', 'Unscheduled', 'Paid', 'Deposited'];
+        
+        return (
+          <select
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={() => saveEdit(event.id, field)}
+            onKeyDown={(e) => handleKeyPress(e, event.id, field)}
+            className="w-full px-2 py-1 border border-indigo-500 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            autoFocus
+          >
+            <option value="">Select...</option>
+            {options.map(option => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        );
         
         return (
           <select
@@ -537,8 +554,8 @@ Created by: ${currentUser.name}
   const totalOwed = events.reduce((sum, event) => sum + (parseFloat(event.totalOwed) || 0), 0);
   const totalPaid = events.reduce((sum, event) => sum + getTotalPaid(event.payments), 0);
   const myEvents = events.filter(event => event.createdBy === currentUser?.id);
-  const paidEvents = events.filter(event => event.eventType === 'paid' || (event.paymentStatus !== 'PR' && !event.eventType));
-  const prEvents = events.filter(event => event.eventType === 'pr' || event.paymentStatus === 'PR');
+  const paidEvents = events.filter(event => event.eventType === 'paid');
+  const prEvents = events.filter(event => event.eventType === 'pr');
 
   if (!currentUser) {
     return (
@@ -696,7 +713,7 @@ Created by: ${currentUser.name}
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Events & Projects</h2>
             <p className="text-sm text-gray-500 mt-1">
-              💡 <span className="font-medium">Pro tip:</span> Click on any cell to edit • Add multiple payments per client • Track payment methods
+              💡 <span className="font-medium">Pro tip:</span> Click payment amounts to expand payment details • Click any cell to edit • Status combines contact & edit status
             </p>
           </div>
           <button
@@ -773,6 +790,17 @@ Created by: ${currentUser.name}
                   </div>
                   
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                    <input
+                      type="text"
+                      value={formData.contactPerson}
+                      onChange={(e) => setFormData({...formData, contactPerson: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      placeholder="Contact name or info"
+                    />
+                  </div>
+                  
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Instagram User</label>
                     <input
                       type="text"
@@ -793,10 +821,10 @@ Created by: ${currentUser.name}
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact Status</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                     <select
-                      value={formData.contact}
-                      onChange={(e) => setFormData({...formData, contact: e.target.value})}
+                      value={formData.status}
+                      onChange={(e) => setFormData({...formData, status: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     >
                       <option value="">Select Status</option>
@@ -804,19 +832,7 @@ Created by: ${currentUser.name}
                       <option value="POSTED">Posted</option>
                       <option value="Booked">Booked</option>
                       <option value="Unscheduled">Unscheduled</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Edit Status</label>
-                    <select
-                      value={formData.editStatus}
-                      onChange={(e) => setFormData({...formData, editStatus: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    >
-                      <option value="">Select Status</option>
                       <option value="Paid">Paid</option>
-                      <option value="PR">PR</option>
                       <option value="Deposited">Deposited</option>
                     </select>
                   </div>
@@ -938,14 +954,13 @@ Created by: ${currentUser.name}
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Film Date</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instagram User</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Details</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Calendar</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
