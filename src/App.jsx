@@ -110,6 +110,16 @@ const ContentTrackerSystem = () => {
   // NEW: Payment dropdown state
   const [expandedPayments, setExpandedPayments] = useState(new Set());
 
+  // Close payment dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setExpandedPayments(new Set());
+    };
+    
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
   const paymentMethods = ['Cashapp', 'Apple Pay', 'Zelle', 'Venmo', 'PayPal', 'Bank Transfer', 'Check', 'Cash', 'Stripe', 'Square'];
 
   // Payment management functions
@@ -164,16 +174,13 @@ const ContentTrackerSystem = () => {
     return (payments || []).reduce((sum, payment) => sum + (parseFloat(payment.amount) || 0), 0);
   };
 
-  const openPaymentModal = (event) => {
-    setCurrentEventForPayments(event);
-    setShowPaymentModal(true);
-  };
-
-  const togglePaymentDropdown = (eventId) => {
+  const togglePaymentDropdown = (eventId, e) => {
+    e.stopPropagation(); // Prevent the click from bubbling up
     const newExpanded = new Set(expandedPayments);
     if (newExpanded.has(eventId)) {
       newExpanded.delete(eventId);
     } else {
+      newExpanded.clear(); // Close other dropdowns
       newExpanded.add(eventId);
     }
     setExpandedPayments(newExpanded);
@@ -433,13 +440,14 @@ Created by: ${currentUser.name}
       if (event.id === eventId) {
         const updatedEvent = { ...event, [field]: editValue };
         
-        // If changing event type, update related fields
-        if (field === 'eventType') {
-          updatedEvent.paymentStatus = editValue === 'paid' ? 'Paid' : 'PR';
-          if (editValue === 'pr') {
+        // If changing payment status, update related fields
+        if (field === 'paymentStatus') {
+          if (editValue === 'PR') {
             updatedEvent.totalOwed = 0;
-            updatedEvent.totalPaid = 0;
-            updatedEvent.paymentMethods = 'PR';
+            updatedEvent.payments = [];
+            updatedEvent.eventType = 'pr';
+          } else if (editValue === 'Paid') {
+            updatedEvent.eventType = 'paid';
           }
         }
 
@@ -470,21 +478,7 @@ Created by: ${currentUser.name}
     const isEditing = editingCell.eventId === event.id && editingCell.field === field;
     
     if (isEditing) {
-      if (field === 'eventType') {
-        return (
-          <select
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onBlur={() => saveEdit(event.id, field)}
-            onKeyDown={(e) => handleKeyPress(e, event.id, field)}
-            className="w-full px-2 py-1 border border-indigo-500 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            autoFocus
-          >
-            <option value="paid">💰 Paid</option>
-            <option value="pr">📢 PR</option>
-          </select>
-        );
-      } else if (field === 'status') {
+      if (field === 'status') {
         const options = ['Edit', 'POSTED', 'Booked', 'Unscheduled'];
         
         return (
@@ -503,7 +497,7 @@ Created by: ${currentUser.name}
           </select>
         );
       } else if (field === 'paymentStatus') {
-        const options = ['Paid', 'PR', 'Deposited'];
+        const options = ['Paid', 'PR'];
         
         return (
           <select
@@ -520,6 +514,8 @@ Created by: ${currentUser.name}
             ))}
           </select>
         );
+      } else if (field === 'editors') {
+        const editorOptions = ['gregg', 'cook', 'arjohn', 'N/A'];
         
         return (
           <select
@@ -531,7 +527,7 @@ Created by: ${currentUser.name}
             autoFocus
           >
             <option value="">Select...</option>
-            {options.map(option => (
+            {editorOptions.map(option => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
@@ -845,7 +841,7 @@ Created by: ${currentUser.name}
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact Status</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                     <select
                       value={formData.status}
                       onChange={(e) => setFormData({...formData, status: e.target.value})}
@@ -869,11 +865,10 @@ Created by: ${currentUser.name}
                       <option value="">Select Status</option>
                       <option value="Paid">Paid</option>
                       <option value="PR">PR</option>
-                      <option value="Deposited">Deposited</option>
                     </select>
                   </div>
                   
-                  {formData.eventType === 'paid' && (
+                  {(formData.eventType === 'paid' || formData.paymentStatus === 'Paid') && (
                     <>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Total Owed ($)</label>
@@ -955,12 +950,17 @@ Created by: ${currentUser.name}
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Editors</label>
-                    <input
-                      type="text"
+                    <select
                       value={formData.editors}
                       onChange={(e) => setFormData({...formData, editors: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
+                    >
+                      <option value="">Select Editor</option>
+                      <option value="gregg">gregg</option>
+                      <option value="cook">cook</option>
+                      <option value="arjohn">arjohn</option>
+                      <option value="N/A">N/A</option>
+                    </select>
                   </div>
                   
                   <div className="md:col-span-2 flex justify-end space-x-3 pt-4">
@@ -995,27 +995,18 @@ Created by: ${currentUser.name}
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instagram User</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Edit Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Owed</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Paid</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Methods</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Editors</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {events.map((event) => (
                   <tr key={event.id} className="hover:bg-gray-50 group">
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      {renderEditableCell(
-                        event, 
-                        'eventType', 
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${(event.eventType === 'pr' || event.paymentStatus === 'PR') ? 'bg-pink-100 text-pink-700' : 'bg-green-100 text-green-700'}`}>
-                          <span className={`w-2 h-2 rounded-full mr-2 ${(event.eventType === 'pr' || event.paymentStatus === 'PR') ? 'bg-pink-500' : 'bg-green-500'}`}></span>
-                          {(event.eventType === 'pr' || event.paymentStatus === 'PR') ? 'PR' : 'Paid'}
-                        </span>
-                      )}
-                    </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {renderEditableCell(
                         event, 
@@ -1033,97 +1024,112 @@ Created by: ${currentUser.name}
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {renderEditableCell(event, 'content', event.content)}
                     </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {renderEditableCell(event, 'contactPerson', event.contactPerson)}
+                    </td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       {renderEditableCell(
                         event, 
-                        'contact', 
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(event.contact)}`}>
-                          {event.contact}
+                        'status', 
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(event.status)}`}>
+                          {event.status}
                         </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm">
-                      {(event.eventType === 'pr' || event.paymentStatus === 'PR') ? (
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-pink-100 text-pink-700">
-                          <span className="w-2 h-2 bg-pink-500 rounded-full mr-2"></span>
-                          PR Event
-                        </span>
-                      ) : (
-                        <div className="space-y-2 min-w-[140px]">
-                          {/* Total Owed */}
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-500 font-medium">Owed:</span>
-                            <span className="text-yellow-700 font-semibold">
-                              {renderEditableCell(event, 'totalOwed', `${parseFloat(event.totalOwed || 0).toFixed(2)}`, 'number')}
-                            </span>
-                          </div>
-                          
-                          {/* Payments */}
-                          <div className="space-y-1">
-                            {(event.payments || []).map((payment, index) => (
-                              <div key={payment.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
-                                <div className="flex items-center">
-                                  <span className="text-green-700 text-xs mr-1">$</span>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={payment.amount}
-                                    onChange={(e) => updatePayment(event.id, payment.id, 'amount', e.target.value)}
-                                    className="w-12 text-green-700 font-semibold bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded px-1 text-xs"
-                                    placeholder="0"
-                                  />
-                                </div>
-                                <select
-                                  value={payment.method}
-                                  onChange={(e) => updatePayment(event.id, payment.id, 'method', e.target.value)}
-                                  className="text-xs border-0 bg-transparent text-gray-600 cursor-pointer focus:outline-none flex-1 mx-2"
-                                >
-                                  {paymentMethods.map(method => (
-                                    <option key={method} value={method}>{method}</option>
-                                  ))}
-                                </select>
-                                <button
-                                  onClick={() => removePayment(event.id, payment.id)}
-                                  className="text-red-500 hover:text-red-700"
-                                  title="Remove payment"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </div>
-                            ))}
-                            
-                            {/* Add Payment Button */}
-                            <button
-                              onClick={() => addPayment(event.id)}
-                              className="w-full text-xs text-indigo-600 hover:text-indigo-800 py-1 border border-dashed border-indigo-300 rounded hover:border-indigo-400 transition-colors flex items-center justify-center"
-                            >
-                              <Plus className="w-3 h-3 mr-1" />
-                              Add Payment
-                            </button>
-                          </div>
-                          
-                          {/* Total Paid */}
-                          <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-200">
-                            <span className="text-gray-500 font-medium">Total Paid:</span>
-                            <span className="text-green-700 font-bold">
-                              ${getTotalPaid(event.payments).toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
                       )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap">
-                      {event.calendarEventId ? (
-                        <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                          <CalendarCheck className="w-3 h-3 mr-1" />
-                          Synced
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                          <Calendar className="w-3 h-3 mr-1" />
-                          Local
+                      {renderEditableCell(
+                        event, 
+                        'paymentStatus', 
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${event.paymentStatus === 'PR' ? 'bg-pink-100 text-pink-800' : 'bg-green-100 text-green-800'}`}>
+                          {event.paymentStatus || 'Not Set'}
                         </span>
                       )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {event.paymentStatus === 'PR' ? (
+                        <span className="text-gray-400">-</span>
+                      ) : (
+                        renderEditableCell(
+                          event, 
+                          'totalOwed', 
+                          `$${parseFloat(event.totalOwed || 0).toFixed(2)}`,
+                          'number'
+                        )
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {event.paymentStatus === 'PR' ? (
+                        <span className="text-gray-400">-</span>
+                      ) : (
+                        <span className="text-green-600 font-semibold">
+                          ${getTotalPaid(event.payments).toFixed(2)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      {event.paymentStatus === 'PR' ? (
+                        <span className="text-gray-400 text-sm">PR Event</span>
+                      ) : (
+                        <div className="relative">
+                          <button
+                            onClick={(e) => togglePaymentDropdown(event.id, e)}
+                            className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center"
+                          >
+                            {(event.payments || []).length} payment{(event.payments || []).length !== 1 ? 's' : ''}
+                            <span className="ml-1">▼</span>
+                          </button>
+                          
+                          {expandedPayments.has(event.id) && (
+                            <div 
+                              className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[200px]"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="p-3 space-y-2">
+                                {(event.payments || []).map((payment, index) => (
+                                  <div key={payment.id} className="flex items-center space-x-2 text-xs">
+                                    <span className="text-green-600">$</span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={payment.amount}
+                                      onChange={(e) => updatePayment(event.id, payment.id, 'amount', e.target.value)}
+                                      className="w-16 px-1 py-1 border border-gray-300 rounded text-xs"
+                                      placeholder="0"
+                                    />
+                                    <select
+                                      value={payment.method}
+                                      onChange={(e) => updatePayment(event.id, payment.id, 'method', e.target.value)}
+                                      className="flex-1 px-1 py-1 border border-gray-300 rounded text-xs"
+                                    >
+                                      {paymentMethods.map(method => (
+                                        <option key={method} value={method}>{method}</option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      onClick={() => removePayment(event.id, payment.id)}
+                                      className="text-red-500 hover:text-red-700"
+                                      title="Remove payment"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                                
+                                <button
+                                  onClick={() => addPayment(event.id)}
+                                  className="w-full text-xs text-indigo-600 hover:text-indigo-800 py-1 border border-dashed border-indigo-300 rounded hover:border-indigo-400 transition-colors flex items-center justify-center"
+                                >
+                                  <Plus className="w-3 h-3 mr-1" />
+                                  Add Payment
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {renderEditableCell(event, 'editors', event.editors || 'N/A')}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
