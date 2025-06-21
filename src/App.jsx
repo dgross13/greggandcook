@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Plus, Edit3, Save, X, LogOut, Users, DollarSign, Camera, Clock } from 'lucide-react';
+import { Calendar, Plus, Edit3, Save, X, LogOut, Users, DollarSign, Camera, Clock, CalendarCheck } from 'lucide-react';
 
 const ContentTrackerSystem = () => {
   const [currentUser, setCurrentUser] = useState(null);
+  const [isCalendarConnected, setIsCalendarConnected] = useState(false);
+  const [gapi, setGapi] = useState(null);
+  
+  // Calendar IDs from your Google Calendar settings
+  const CALENDAR_IDS = {
+    paid: 'c_6e8e002f93b9598e34f4e73652d68b9fba480067ce649685d3f561d7f114b2c@group.calendar.google.com', // DL MEDIA SCED
+    pr: 'c_9d65f1d498bd1c56fd28936fe2e06c1eef0f933cdaa24c5195c1c8de07e08f6d@group.calendar.google.com' // PR SCED
+  };
+
   const [events, setEvents] = useState([
     {
       id: 1,
@@ -17,7 +26,9 @@ const ContentTrackerSystem = () => {
       totalPaid: 350.00,
       paymentMethods: 'Cashapp',
       editors: 'N/A',
-      createdBy: 'gregg'
+      createdBy: 'gregg',
+      eventType: 'paid',
+      calendarEventId: null
     },
     {
       id: 2,
@@ -27,12 +38,14 @@ const ContentTrackerSystem = () => {
       content: 'Dumblit Live',
       contact: 'POSTED',
       editStatus: 'PR',
-      paymentStatus: 'Paid',
+      paymentStatus: 'PR',
       totalOwed: 0,
       totalPaid: 0,
       paymentMethods: 'PR',
       editors: 'N/A',
-      createdBy: 'cook'
+      createdBy: 'cook',
+      eventType: 'pr',
+      calendarEventId: null
     },
     {
       id: 3,
@@ -47,7 +60,9 @@ const ContentTrackerSystem = () => {
       totalPaid: 200.00,
       paymentMethods: 'Apple Pay',
       editors: 'N/A',
-      createdBy: 'gregg'
+      createdBy: 'gregg',
+      eventType: 'paid',
+      calendarEventId: null
     },
     {
       id: 4,
@@ -62,7 +77,9 @@ const ContentTrackerSystem = () => {
       totalPaid: 800.00,
       paymentMethods: 'Multiple',
       editors: 'N/A',
-      createdBy: 'cook'
+      createdBy: 'cook',
+      eventType: 'paid',
+      calendarEventId: null
     }
   ]);
   
@@ -79,7 +96,8 @@ const ContentTrackerSystem = () => {
     totalOwed: '',
     totalPaid: '',
     paymentMethods: '',
-    editors: ''
+    editors: '',
+    eventType: 'paid' // New field to distinguish paid vs PR
   });
 
   const users = [
@@ -88,6 +106,151 @@ const ContentTrackerSystem = () => {
   ];
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+
+  // Initialize Google Calendar API
+  useEffect(() => {
+    const initializeGoogleAPI = async () => {
+      if (window.gapi) {
+        await window.gapi.load('client:auth2', async () => {
+          try {
+            await window.gapi.client.init({
+              apiKey: 'AIzaSyDRGpHAsKwvLz7ZkVPuBjRuIHefhFX2DLE',
+              clientId: '746473079813-55e8j8ni075fc7qn8459tc5ivdv731t2.apps.googleusercontent.com',
+              discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'],
+              scope: 'https://www.googleapis.com/auth/calendar'
+            });
+            setGapi(window.gapi);
+          } catch (error) {
+            console.error('Failed to initialize Google API:', error);
+          }
+        });
+      }
+    };
+
+    // Load Google API script
+    if (!window.gapi) {
+      const script = document.createElement('script');
+      script.src = 'https://apis.google.com/js/api.js';
+      script.onload = initializeGoogleAPI;
+      document.body.appendChild(script);
+    } else {
+      initializeGoogleAPI();
+    }
+  }, []);
+
+  const connectToCalendar = async () => {
+    if (!gapi) {
+      alert('Google API not loaded. Please refresh the page and try again.');
+      return;
+    }
+    
+    try {
+      const authInstance = gapi.auth2.getAuthInstance();
+      const user = await authInstance.signIn();
+      if (user.isSignedIn()) {
+        setIsCalendarConnected(true);
+        alert('Successfully connected to Google Calendar!');
+      }
+    } catch (error) {
+      console.error('Calendar connection failed:', error);
+      alert('Failed to connect to Google Calendar. Please try again.');
+    }
+  };
+
+  const createCalendarEvent = async (eventData) => {
+    if (!gapi || !isCalendarConnected) return null;
+
+    try {
+      const calendarId = eventData.eventType === 'paid' ? CALENDAR_IDS.paid : CALENDAR_IDS.pr;
+      const eventTitle = `${eventData.client} - ${eventData.content}`;
+      const eventDescription = `
+Client: ${eventData.client}
+Instagram User: ${eventData.instagramUser}
+Content: ${eventData.content}
+Type: ${eventData.eventType.toUpperCase()}
+${eventData.eventType === 'paid' ? `Amount: $${eventData.totalOwed}` : 'PR Event (No Payment)'}
+Created by: ${currentUser.name}
+      `.trim();
+
+      const calendarEvent = {
+        summary: eventTitle,
+        description: eventDescription,
+        start: {
+          date: eventData.filmDate,
+          timeZone: 'America/New_York'
+        },
+        end: {
+          date: eventData.filmDate,
+          timeZone: 'America/New_York'
+        },
+        colorId: eventData.eventType === 'paid' ? '10' : '11' // Green for paid, red for PR
+      };
+
+      const response = await gapi.client.calendar.events.insert({
+        calendarId: calendarId,
+        resource: calendarEvent
+      });
+
+      return response.result.id;
+    } catch (error) {
+      console.error('Failed to create calendar event:', error);
+      alert('Failed to create calendar event. Event saved locally only.');
+      return null;
+    }
+  };
+
+  const updateCalendarEvent = async (eventData, calendarEventId) => {
+    if (!gapi || !isCalendarConnected || !calendarEventId) return;
+
+    try {
+      const calendarId = eventData.eventType === 'paid' ? CALENDAR_IDS.paid : CALENDAR_IDS.pr;
+      const eventTitle = `${eventData.client} - ${eventData.content}`;
+      const eventDescription = `
+Client: ${eventData.client}
+Instagram User: ${eventData.instagramUser}
+Content: ${eventData.content}
+Type: ${eventData.eventType.toUpperCase()}
+${eventData.eventType === 'paid' ? `Amount: $${eventData.totalOwed}` : 'PR Event (No Payment)'}
+Created by: ${currentUser.name}
+      `.trim();
+
+      const calendarEvent = {
+        summary: eventTitle,
+        description: eventDescription,
+        start: {
+          date: eventData.filmDate,
+          timeZone: 'America/New_York'
+        },
+        end: {
+          date: eventData.filmDate,
+          timeZone: 'America/New_York'
+        },
+        colorId: eventData.eventType === 'paid' ? '10' : '11'
+      };
+
+      await gapi.client.calendar.events.update({
+        calendarId: calendarId,
+        eventId: calendarEventId,
+        resource: calendarEvent
+      });
+    } catch (error) {
+      console.error('Failed to update calendar event:', error);
+    }
+  };
+
+  const deleteCalendarEvent = async (eventType, calendarEventId) => {
+    if (!gapi || !isCalendarConnected || !calendarEventId) return;
+
+    try {
+      const calendarId = eventType === 'paid' ? CALENDAR_IDS.paid : CALENDAR_IDS.pr;
+      await gapi.client.calendar.events.delete({
+        calendarId: calendarId,
+        eventId: calendarEventId
+      });
+    } catch (error) {
+      console.error('Failed to delete calendar event:', error);
+    }
+  };
 
   const handleLogin = () => {
     const user = users.find(u => u.id === loginForm.username && u.password === loginForm.password);
@@ -115,29 +278,44 @@ const ContentTrackerSystem = () => {
       totalOwed: '',
       totalPaid: '',
       paymentMethods: '',
-      editors: ''
+      editors: '',
+      eventType: 'paid'
     });
     setEditingEvent(null);
     setShowEventForm(false);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.filmDate || !formData.client) {
       alert('Please fill in required fields (Film Date and Client)');
       return;
     }
     
+    let calendarEventId = null;
+    
     if (editingEvent) {
+      // Update existing event
+      if (editingEvent.calendarEventId) {
+        await updateCalendarEvent(formData, editingEvent.calendarEventId);
+        calendarEventId = editingEvent.calendarEventId;
+      } else {
+        calendarEventId = await createCalendarEvent(formData);
+      }
+      
       setEvents(events.map(event => 
         event.id === editingEvent.id 
-          ? { ...formData, id: editingEvent.id, createdBy: editingEvent.createdBy }
+          ? { ...formData, id: editingEvent.id, createdBy: editingEvent.createdBy, calendarEventId }
           : event
       ));
     } else {
+      // Create new event
+      calendarEventId = await createCalendarEvent(formData);
+      
       const newEvent = {
         ...formData,
         id: Date.now(),
-        createdBy: currentUser.id
+        createdBy: currentUser.id,
+        calendarEventId
       };
       setEvents([...events, newEvent]);
     }
@@ -146,13 +324,17 @@ const ContentTrackerSystem = () => {
   };
 
   const handleEdit = (event) => {
-    setFormData(event);
+    setFormData({...event, eventType: event.eventType || (event.paymentStatus === 'PR' ? 'pr' : 'paid')});
     setEditingEvent(event);
     setShowEventForm(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this event?')) {
+      const event = events.find(e => e.id === id);
+      if (event && event.calendarEventId) {
+        await deleteCalendarEvent(event.eventType || (event.paymentStatus === 'PR' ? 'pr' : 'paid'), event.calendarEventId);
+      }
       setEvents(events.filter(event => event.id !== id));
     }
   };
@@ -173,6 +355,8 @@ const ContentTrackerSystem = () => {
   const totalOwed = events.reduce((sum, event) => sum + (parseFloat(event.totalOwed) || 0), 0);
   const totalPaid = events.reduce((sum, event) => sum + (parseFloat(event.totalPaid) || 0), 0);
   const myEvents = events.filter(event => event.createdBy === currentUser?.id);
+  const paidEvents = events.filter(event => event.eventType === 'paid' || (event.paymentStatus !== 'PR' && !event.eventType));
+  const prEvents = events.filter(event => event.eventType === 'pr' || event.paymentStatus === 'PR');
 
   if (!currentUser) {
     return (
@@ -240,6 +424,21 @@ const ContentTrackerSystem = () => {
             </div>
             
             <div className="flex items-center space-x-4">
+              {!isCalendarConnected && (
+                <button
+                  onClick={connectToCalendar}
+                  className="flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <CalendarCheck className="w-4 h-4 mr-2" />
+                  Connect Calendar
+                </button>
+              )}
+              {isCalendarConnected && (
+                <span className="flex items-center text-green-600 text-sm">
+                  <CalendarCheck className="w-4 h-4 mr-1" />
+                  Calendar Connected
+                </span>
+              )}
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">Welcome, {currentUser.name}</p>
                 <p className="text-xs text-gray-500">{myEvents.length} events created</p>
@@ -258,7 +457,7 @@ const ContentTrackerSystem = () => {
 
       {/* Stats Dashboard */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center">
               <Camera className="w-8 h-8 text-blue-600" />
@@ -271,10 +470,20 @@ const ContentTrackerSystem = () => {
           
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center">
-              <Users className="w-8 h-8 text-green-600" />
+              <DollarSign className="w-8 h-8 text-green-600" />
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">My Events</p>
-                <p className="text-2xl font-bold text-gray-900">{myEvents.length}</p>
+                <p className="text-sm font-medium text-gray-600">Paid Events</p>
+                <p className="text-2xl font-bold text-gray-900">{paidEvents.length}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <Users className="w-8 h-8 text-pink-600" />
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">PR Events</p>
+                <p className="text-2xl font-bold text-gray-900">{prEvents.length}</p>
               </div>
             </div>
           </div>
@@ -330,6 +539,32 @@ const ContentTrackerSystem = () => {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Event Type</label>
+                    <div className="flex space-x-4">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="paid"
+                          checked={formData.eventType === 'paid'}
+                          onChange={(e) => setFormData({...formData, eventType: e.target.value, paymentStatus: e.target.value === 'paid' ? 'Paid' : 'PR'})}
+                          className="mr-2"
+                        />
+                        <span className="text-green-600 font-medium">💰 Paid Event (DL Media Calendar)</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="pr"
+                          checked={formData.eventType === 'pr'}
+                          onChange={(e) => setFormData({...formData, eventType: e.target.value, paymentStatus: e.target.value === 'paid' ? 'Paid' : 'PR'})}
+                          className="mr-2"
+                        />
+                        <span className="text-pink-600 font-medium">📢 PR Event (PR Calendar)</span>
+                      </label>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Film Date</label>
                     <input
@@ -399,52 +634,42 @@ const ContentTrackerSystem = () => {
                     </select>
                   </div>
                   
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Status</label>
-                    <select
-                      value={formData.paymentStatus}
-                      onChange={(e) => setFormData({...formData, paymentStatus: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    >
-                      <option value="">Select Status</option>
-                      <option value="Paid">Paid</option>
-                      <option value="PR">PR</option>
-                      <option value="Deposited">Deposited</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Total Owed ($)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.totalOwed}
-                      onChange={(e) => setFormData({...formData, totalOwed: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Total Paid ($)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.totalPaid}
-                      onChange={(e) => setFormData({...formData, totalPaid: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Methods</label>
-                    <input
-                      type="text"
-                      value={formData.paymentMethods}
-                      onChange={(e) => setFormData({...formData, paymentMethods: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      placeholder="e.g., Cashapp, Apple Pay, Stripe"
-                    />
-                  </div>
+                  {formData.eventType === 'paid' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Total Owed ($)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formData.totalOwed}
+                          onChange={(e) => setFormData({...formData, totalOwed: e.target.value})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Total Paid ($)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formData.totalPaid}
+                          onChange={(e) => setFormData({...formData, totalPaid: e.target.value})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Payment Methods</label>
+                        <input
+                          type="text"
+                          value={formData.paymentMethods}
+                          onChange={(e) => setFormData({...formData, paymentMethods: e.target.value})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          placeholder="e.g., Cashapp, Apple Pay, Stripe"
+                        />
+                      </div>
+                    </>
+                  )}
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Editors</label>
@@ -483,21 +708,25 @@ const ContentTrackerSystem = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Film Date</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instagram User</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Edit Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amounts</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creator</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Calendar</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {events.map((event) => (
                   <tr key={event.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${(event.eventType === 'pr' || event.paymentStatus === 'PR') ? 'bg-pink-100 text-pink-800' : 'bg-green-100 text-green-800'}`}>
+                        {(event.eventType === 'pr' || event.paymentStatus === 'PR') ? '📢 PR' : '💰 Paid'}
+                      </span>
+                    </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {new Date(event.filmDate).toLocaleDateString()}
                     </td>
@@ -509,26 +738,28 @@ const ContentTrackerSystem = () => {
                         {event.contact}
                       </span>
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(event.editStatus)}`}>
-                        {event.editStatus}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(event.paymentStatus)}`}>
-                        {event.paymentStatus}
-                      </span>
-                    </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div className="text-xs">
-                        <div>Owed: ${parseFloat(event.totalOwed || 0).toFixed(2)}</div>
-                        <div>Paid: ${parseFloat(event.totalPaid || 0).toFixed(2)}</div>
-                      </div>
+                      {(event.eventType === 'pr' || event.paymentStatus === 'PR') ? (
+                        <span className="text-pink-600 font-medium">No Payment</span>
+                      ) : (
+                        <div className="text-xs">
+                          <div>Owed: ${parseFloat(event.totalOwed || 0).toFixed(2)}</div>
+                          <div>Paid: ${parseFloat(event.totalPaid || 0).toFixed(2)}</div>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${event.createdBy === 'gregg' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
-                        {event.createdBy}
-                      </span>
+                      {event.calendarEventId ? (
+                        <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          <CalendarCheck className="w-3 h-3 mr-1" />
+                          Synced
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          Local
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
