@@ -23,8 +23,9 @@ const ContentTrackerSystem = () => {
       editStatus: 'Paid',
       paymentStatus: 'Paid',
       totalOwed: 350.00,
-      totalPaid: 350.00,
-      paymentMethods: 'Cashapp',
+      payments: [
+        { id: 1, amount: 350.00, method: 'Cashapp' }
+      ],
       editors: 'N/A',
       createdBy: 'gregg',
       eventType: 'paid',
@@ -40,8 +41,7 @@ const ContentTrackerSystem = () => {
       editStatus: 'PR',
       paymentStatus: 'PR',
       totalOwed: 0,
-      totalPaid: 0,
-      paymentMethods: 'PR',
+      payments: [],
       editors: 'N/A',
       createdBy: 'cook',
       eventType: 'pr',
@@ -57,8 +57,9 @@ const ContentTrackerSystem = () => {
       editStatus: 'Paid',
       paymentStatus: 'Paid',
       totalOwed: 200.00,
-      totalPaid: 200.00,
-      paymentMethods: 'Apple Pay',
+      payments: [
+        { id: 1, amount: 200.00, method: 'Apple Pay' }
+      ],
       editors: 'N/A',
       createdBy: 'gregg',
       eventType: 'paid',
@@ -73,9 +74,12 @@ const ContentTrackerSystem = () => {
       contact: 'Edit',
       editStatus: 'Paid',
       paymentStatus: 'Paid',
-      totalOwed: 300.00,
-      totalPaid: 800.00,
-      paymentMethods: 'Multiple',
+      totalOwed: 1000.00,
+      payments: [
+        { id: 1, amount: 300.00, method: 'Cashapp' },
+        { id: 2, amount: 400.00, method: 'Apple Pay' },
+        { id: 3, amount: 300.00, method: 'Zelle' }
+      ],
       editors: 'N/A',
       createdBy: 'cook',
       eventType: 'paid',
@@ -94,8 +98,7 @@ const ContentTrackerSystem = () => {
     editStatus: '',
     paymentStatus: '',
     totalOwed: '',
-    totalPaid: '',
-    paymentMethods: '',
+    payments: [],
     editors: '',
     eventType: 'paid'
   });
@@ -103,6 +106,69 @@ const ContentTrackerSystem = () => {
   // NEW: Inline editing state
   const [editingCell, setEditingCell] = useState({ eventId: null, field: null });
   const [editValue, setEditValue] = useState('');
+
+  // NEW: Payment management state
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [currentEventForPayments, setCurrentEventForPayments] = useState(null);
+
+  const paymentMethods = ['Cashapp', 'Apple Pay', 'Zelle', 'Venmo', 'PayPal', 'Bank Transfer', 'Check', 'Cash', 'Stripe', 'Square'];
+
+  // Payment management functions
+  const addPayment = (eventId) => {
+    const updatedEvents = events.map(event => {
+      if (event.id === eventId) {
+        const newPayment = {
+          id: Date.now(),
+          amount: 0,
+          method: 'Cashapp'
+        };
+        return {
+          ...event,
+          payments: [...(event.payments || []), newPayment]
+        };
+      }
+      return event;
+    });
+    setEvents(updatedEvents);
+  };
+
+  const updatePayment = (eventId, paymentId, field, value) => {
+    const updatedEvents = events.map(event => {
+      if (event.id === eventId) {
+        const updatedPayments = event.payments.map(payment => {
+          if (payment.id === paymentId) {
+            return { ...payment, [field]: field === 'amount' ? parseFloat(value) || 0 : value };
+          }
+          return payment;
+        });
+        return { ...event, payments: updatedPayments };
+      }
+      return event;
+    });
+    setEvents(updatedEvents);
+  };
+
+  const removePayment = (eventId, paymentId) => {
+    const updatedEvents = events.map(event => {
+      if (event.id === eventId) {
+        return {
+          ...event,
+          payments: event.payments.filter(payment => payment.id !== paymentId)
+        };
+      }
+      return event;
+    });
+    setEvents(updatedEvents);
+  };
+
+  const getTotalPaid = (payments) => {
+    return (payments || []).reduce((sum, payment) => sum + (parseFloat(payment.amount) || 0), 0);
+  };
+
+  const openPaymentModal = (event) => {
+    setCurrentEventForPayments(event);
+    setShowPaymentModal(true);
+  };
 
   const users = [
     { id: 'gregg', name: 'Gregg', password: 'gregg123' },
@@ -172,7 +238,7 @@ Client: ${eventData.client}
 Instagram User: ${eventData.instagramUser}
 Content: ${eventData.content}
 Type: ${eventData.eventType.toUpperCase()}
-${eventData.eventType === 'paid' ? `Amount: $${eventData.totalOwed}` : 'PR Event (No Payment)'}
+${eventData.eventType === 'paid' ? `Amount Owed: ${eventData.totalOwed}\nTotal Paid: ${getTotalPaid(eventData.payments)}` : 'PR Event (No Payment)'}
 Created by: ${currentUser.name}
       `.trim();
 
@@ -214,7 +280,7 @@ Client: ${eventData.client}
 Instagram User: ${eventData.instagramUser}
 Content: ${eventData.content}
 Type: ${eventData.eventType.toUpperCase()}
-${eventData.eventType === 'paid' ? `Amount: $${eventData.totalOwed}` : 'PR Event (No Payment)'}
+${eventData.eventType === 'paid' ? `Amount Owed: ${eventData.totalOwed}\nTotal Paid: ${getTotalPaid(eventData.payments)}` : 'PR Event (No Payment)'}
 Created by: ${currentUser.name}
       `.trim();
 
@@ -280,8 +346,7 @@ Created by: ${currentUser.name}
       editStatus: '',
       paymentStatus: '',
       totalOwed: '',
-      totalPaid: '',
-      paymentMethods: '',
+      payments: [],
       editors: '',
       eventType: 'paid'
     });
@@ -470,7 +535,7 @@ Created by: ${currentUser.name}
   };
 
   const totalOwed = events.reduce((sum, event) => sum + (parseFloat(event.totalOwed) || 0), 0);
-  const totalPaid = events.reduce((sum, event) => sum + (parseFloat(event.totalPaid) || 0), 0);
+  const totalPaid = events.reduce((sum, event) => sum + getTotalPaid(event.payments), 0);
   const myEvents = events.filter(event => event.createdBy === currentUser?.id);
   const paidEvents = events.filter(event => event.eventType === 'paid' || (event.paymentStatus !== 'PR' && !event.eventType));
   const prEvents = events.filter(event => event.eventType === 'pr' || event.paymentStatus === 'PR');
@@ -631,7 +696,7 @@ Created by: ${currentUser.name}
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Events & Projects</h2>
             <p className="text-sm text-gray-500 mt-1">
-              💡 <span className="font-medium">Pro tip:</span> Click on any cell to edit directly • Press Enter to save • Press Escape to cancel
+              💡 <span className="font-medium">Pro tip:</span> Click on any cell to edit • Add multiple payments per client • Track payment methods
             </p>
           </div>
           <button
@@ -769,26 +834,69 @@ Created by: ${currentUser.name}
                         />
                       </div>
                       
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Total Paid ($)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={formData.totalPaid}
-                          onChange={(e) => setFormData({...formData, totalPaid: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Payment Methods</label>
-                        <input
-                          type="text"
-                          value={formData.paymentMethods}
-                          onChange={(e) => setFormData({...formData, paymentMethods: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                          placeholder="e.g., Cashapp, Apple Pay, Stripe"
-                        />
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Payments Received</label>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {(formData.payments || []).map((payment, index) => (
+                            <div key={payment.id || index} className="flex items-center space-x-2 bg-gray-50 rounded p-2">
+                              <div className="flex items-center">
+                                <span className="text-gray-500 text-sm mr-1">$</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={payment.amount || ''}
+                                  onChange={(e) => {
+                                    const updatedPayments = [...(formData.payments || [])];
+                                    updatedPayments[index] = { ...payment, amount: parseFloat(e.target.value) || 0 };
+                                    setFormData({...formData, payments: updatedPayments});
+                                  }}
+                                  placeholder="0.00"
+                                  className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                                />
+                              </div>
+                              <select
+                                value={payment.method || 'Cashapp'}
+                                onChange={(e) => {
+                                  const updatedPayments = [...(formData.payments || [])];
+                                  updatedPayments[index] = { ...payment, method: e.target.value };
+                                  setFormData({...formData, payments: updatedPayments});
+                                }}
+                                className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                              >
+                                {paymentMethods.map(method => (
+                                  <option key={method} value={method}>{method}</option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updatedPayments = formData.payments.filter((_, i) => i !== index);
+                                  setFormData({...formData, payments: updatedPayments});
+                                }}
+                                className="text-red-600 hover:text-red-800"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newPayment = { id: Date.now(), amount: 0, method: 'Cashapp' };
+                              setFormData({...formData, payments: [...(formData.payments || []), newPayment]});
+                            }}
+                            className="w-full py-2 border border-dashed border-gray-300 rounded text-sm text-gray-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                          >
+                            + Add Payment
+                          </button>
+                        </div>
+                        {formData.payments && formData.payments.length > 0 && (
+                          <div className="mt-2 text-sm text-gray-600">
+                            Total Paid: <span className="font-semibold text-green-600">
+                              ${formData.payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
@@ -887,23 +995,64 @@ Created by: ${currentUser.name}
                           PR Event
                         </span>
                       ) : (
-                        <div className="space-y-2 min-w-[120px]">
+                        <div className="space-y-2 min-w-[140px]">
+                          {/* Total Owed */}
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-gray-500 font-medium">Owed:</span>
                             <span className="text-yellow-700 font-semibold">
-                              {renderEditableCell(event, 'totalOwed', `$${parseFloat(event.totalOwed || 0).toFixed(2)}`, 'number')}
+                              {renderEditableCell(event, 'totalOwed', `${parseFloat(event.totalOwed || 0).toFixed(2)}`, 'number')}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-500 font-medium">Paid:</span>
-                            <span className="text-green-700 font-semibold">
-                              {renderEditableCell(event, 'totalPaid', `$${parseFloat(event.totalPaid || 0).toFixed(2)}`, 'number')}
-                            </span>
+                          
+                          {/* Payments */}
+                          <div className="space-y-1">
+                            {(event.payments || []).map((payment, index) => (
+                              <div key={payment.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
+                                <div className="flex items-center">
+                                  <span className="text-green-700 text-xs mr-1">$</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={payment.amount}
+                                    onChange={(e) => updatePayment(event.id, payment.id, 'amount', e.target.value)}
+                                    className="w-12 text-green-700 font-semibold bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded px-1 text-xs"
+                                    placeholder="0"
+                                  />
+                                </div>
+                                <select
+                                  value={payment.method}
+                                  onChange={(e) => updatePayment(event.id, payment.id, 'method', e.target.value)}
+                                  className="text-xs border-0 bg-transparent text-gray-600 cursor-pointer focus:outline-none flex-1 mx-2"
+                                >
+                                  {paymentMethods.map(method => (
+                                    <option key={method} value={method}>{method}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={() => removePayment(event.id, payment.id)}
+                                  className="text-red-500 hover:text-red-700"
+                                  title="Remove payment"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                            
+                            {/* Add Payment Button */}
+                            <button
+                              onClick={() => addPayment(event.id)}
+                              className="w-full text-xs text-indigo-600 hover:text-indigo-800 py-1 border border-dashed border-indigo-300 rounded hover:border-indigo-400 transition-colors flex items-center justify-center"
+                            >
+                              <Plus className="w-3 h-3 mr-1" />
+                              Add Payment
+                            </button>
                           </div>
-                          <div className="flex items-center text-xs pt-1 border-t border-gray-100">
-                            <DollarSign className="w-3 h-3 text-gray-400 mr-1 flex-shrink-0" />
-                            <span className="text-gray-600 truncate text-xs">
-                              {renderEditableCell(event, 'paymentMethods', event.paymentMethods || 'Not set')}
+                          
+                          {/* Total Paid */}
+                          <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-200">
+                            <span className="text-gray-500 font-medium">Total Paid:</span>
+                            <span className="text-green-700 font-bold">
+                              ${getTotalPaid(event.payments).toFixed(2)}
                             </span>
                           </div>
                         </div>
